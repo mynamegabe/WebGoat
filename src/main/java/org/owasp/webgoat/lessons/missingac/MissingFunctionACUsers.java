@@ -31,17 +31,18 @@ public class MissingFunctionACUsers {
   private final MissingAccessControlUserRepository userRepository;
 
   @GetMapping(path = {"access-control/users"})
-  public ModelAndView listUsers() {
+  public ModelAndView listUsers(@CurrentUsername String username) {
 
     ModelAndView model = new ModelAndView();
     model.setViewName("list_users");
-    List<User> allUsers = userRepository.findAllUsers();
-    model.addObject("numUsers", allUsers.size());
-    // add display user objects in place of direct users
+    // add display user objects in place of direct users, only administrators may see them
     List<DisplayUser> displayUsers = new ArrayList<>();
-    for (User user : allUsers) {
-      displayUsers.add(new DisplayUser(user, PASSWORD_SALT_SIMPLE));
+    if (isAdmin(username)) {
+      for (User user : userRepository.findAllUsers()) {
+        displayUsers.add(new DisplayUser(user, PASSWORD_SALT_SIMPLE));
+      }
     }
+    model.addObject("numUsers", displayUsers.size());
     model.addObject("allUsers", displayUsers);
 
     return model;
@@ -51,7 +52,10 @@ public class MissingFunctionACUsers {
       path = {"access-control/users"},
       consumes = "application/json")
   @ResponseBody
-  public ResponseEntity<List<DisplayUser>> usersService() {
+  public ResponseEntity<List<DisplayUser>> usersService(@CurrentUsername String username) {
+    if (!isAdmin(username)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
     return ResponseEntity.ok(
         userRepository.findAllUsers().stream()
             .map(user -> new DisplayUser(user, PASSWORD_SALT_SIMPLE))
@@ -63,8 +67,7 @@ public class MissingFunctionACUsers {
       consumes = "application/json")
   @ResponseBody
   public ResponseEntity<List<DisplayUser>> usersFixed(@CurrentUsername String username) {
-    var currentUser = userRepository.findByUsername(username);
-    if (currentUser != null && currentUser.isAdmin()) {
+    if (isAdmin(username)) {
       return ResponseEntity.ok(
           userRepository.findAllUsers().stream()
               .map(user -> new DisplayUser(user, PASSWORD_SALT_ADMIN))
@@ -78,8 +81,13 @@ public class MissingFunctionACUsers {
       consumes = "application/json",
       produces = "application/json")
   @ResponseBody
-  public User addUser(@RequestBody User newUser) {
+  public User addUser(@RequestBody User newUser, @CurrentUsername String username) {
     try {
+      // the privilege level of an account is never taken from the request body, only an existing
+      // administrator is allowed to hand out the admin role
+      if (newUser.isAdmin() && !isAdmin(username)) {
+        newUser.setAdmin(false);
+      }
       userRepository.save(newUser);
       return newUser;
     } catch (Exception ex) {
@@ -91,5 +99,13 @@ public class MissingFunctionACUsers {
     // "application/json", produces = "application/json")
     // TODO implement delete method with id param and authorization
 
+  }
+
+  private boolean isAdmin(String username) {
+    if (username == null) {
+      return false;
+    }
+    var currentUser = userRepository.findByUsername(username);
+    return currentUser != null && currentUser.isAdmin();
   }
 }
