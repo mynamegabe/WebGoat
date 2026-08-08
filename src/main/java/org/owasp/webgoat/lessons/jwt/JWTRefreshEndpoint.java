@@ -10,15 +10,14 @@ import static org.springframework.http.ResponseEntity.ok;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.Header;
-import io.jsonwebtoken.Jwt;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import java.util.ArrayList;
+import io.jsonwebtoken.SignatureAlgorithm;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
@@ -44,7 +43,8 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
 
   public static final String PASSWORD = "bm5nhSkxCXZkKRy4";
   private static final String JWT_PASSWORD = "bm5n3SkxCX4kKRy4";
-  private static final List<String> validRefreshTokens = new ArrayList<>();
+  // A refresh token is bound to the user it was handed out to
+  private static final Map<String, String> validRefreshTokens = new ConcurrentHashMap<>();
 
   @PostMapping(
       value = "/JWT/refresh/login",
@@ -74,10 +74,21 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
             .compact();
     Map<String, Object> tokenJson = new HashMap<>();
     String refreshToken = RandomStringUtils.randomAlphabetic(20);
-    validRefreshTokens.add(refreshToken);
+    validRefreshTokens.put(refreshToken, user);
     tokenJson.put("access_token", token);
     tokenJson.put("refresh_token", refreshToken);
     return tokenJson;
+  }
+
+  // Only accepts a token signed with the algorithm the server uses itself, unsigned
+  // tokens ("alg": "none") and tokens signed with another algorithm are rejected.
+  private Jws<Claims> parseToken(String token) {
+    String jwt = token.replace("Bearer ", "");
+    Jws<Claims> jws = Jwts.parser().setSigningKey(JWT_PASSWORD).parseClaimsJws(jwt);
+    if (!SignatureAlgorithm.HS512.getValue().equals(jws.getHeader().getAlgorithm())) {
+      throw new JwtException("Unexpected signing algorithm");
+    }
+    return jws;
   }
 
   @PostMapping("/JWT/refresh/checkout")
@@ -88,19 +99,15 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
     try {
-      Jwt jwt = Jwts.parser().setSigningKey(JWT_PASSWORD).parse(token.replace("Bearer ", ""));
-      Claims claims = (Claims) jwt.getBody();
+      Claims claims = parseToken(token).getBody();
       String user = (String) claims.get("user");
       if ("Tom".equals(user)) {
-        if ("none".equals(jwt.getHeader().get("alg"))) {
-          return ok(success(this).feedback("jwt-refresh-alg-none").build());
-        }
         return ok(success(this).build());
       }
       return ok(failed(this).feedback("jwt-refresh-not-tom").feedbackArgs(user).build());
     } catch (ExpiredJwtException e) {
       return ok(failed(this).output(e.getMessage()).build());
-    } catch (JwtException e) {
+    } catch (JwtException | IllegalArgumentException e) {
       return ok(failed(this).feedback("jwt-invalid-token").build());
     }
   }
@@ -117,18 +124,18 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
     String user;
     String refreshToken;
     try {
-      Jwt<Header, Claims> jwt =
-          Jwts.parser().setSigningKey(JWT_PASSWORD).parse(token.replace("Bearer ", ""));
-      user = (String) jwt.getBody().get("user");
+      user = (String) parseToken(token).getBody().get("user");
       refreshToken = (String) json.get("refresh_token");
     } catch (ExpiredJwtException e) {
       user = (String) e.getClaims().get("user");
       refreshToken = (String) json.get("refresh_token");
+    } catch (JwtException | IllegalArgumentException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
     if (user == null || refreshToken == null) {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-    } else if (validRefreshTokens.contains(refreshToken)) {
+    } else if (user.equals(validRefreshTokens.get(refreshToken))) {
       validRefreshTokens.remove(refreshToken);
       return ok(createNewTokens(user));
     } else {

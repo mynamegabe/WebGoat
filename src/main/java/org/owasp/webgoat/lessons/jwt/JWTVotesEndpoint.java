@@ -11,15 +11,18 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwt;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.impl.TextCodec;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -52,11 +55,28 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class JWTVotesEndpoint implements AssignmentEndpoint {
 
-  public static final String JWT_PASSWORD = TextCodec.BASE64.encode("victory");
+  // The signing key is a random 512 bit value which cannot be guessed with a word list
+  public static final String JWT_PASSWORD = generateSigningKey();
   private static String validUsers = "TomJerrySylvester";
 
   private static int totalVotes = 38929;
   private final Map<String, Vote> votes = new HashMap<>();
+
+  private static String generateSigningKey() {
+    byte[] key = new byte[64];
+    new SecureRandom().nextBytes(key);
+    return TextCodec.BASE64.encode(Base64.getEncoder().encodeToString(key));
+  }
+
+  // Only accepts a token signed with the algorithm the server uses itself, unsigned
+  // tokens ("alg": "none") and tokens signed with another algorithm are rejected.
+  private static Claims parseToken(String accessToken) {
+    Jws<Claims> jws = Jwts.parser().setSigningKey(JWT_PASSWORD).parseClaimsJws(accessToken);
+    if (!SignatureAlgorithm.HS512.getValue().equals(jws.getHeader().getAlgorithm())) {
+      throw new JwtException("Unexpected signing algorithm");
+    }
+    return jws.getBody();
+  }
 
   @PostConstruct
   public void initVotes() {
@@ -136,15 +156,14 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       value.setSerializationView(Views.GuestView.class);
     } else {
       try {
-        Jwt jwt = Jwts.parser().setSigningKey(JWT_PASSWORD).parse(accessToken);
-        Claims claims = (Claims) jwt.getBody();
+        Claims claims = parseToken(accessToken);
         String user = (String) claims.get("user");
         if ("Guest".equals(user) || !validUsers.contains(user)) {
           value.setSerializationView(Views.GuestView.class);
         } else {
           value.setSerializationView(Views.UserView.class);
         }
-      } catch (JwtException e) {
+      } catch (JwtException | IllegalArgumentException e) {
         value.setSerializationView(Views.GuestView.class);
       }
     }
@@ -161,8 +180,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     } else {
       try {
-        Jwt jwt = Jwts.parser().setSigningKey(JWT_PASSWORD).parse(accessToken);
-        Claims claims = (Claims) jwt.getBody();
+        Claims claims = parseToken(accessToken);
         String user = (String) claims.get("user");
         if (!validUsers.contains(user)) {
           return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -170,7 +188,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
           ofNullable(votes.get(title)).ifPresent(v -> v.incrementNumberOfVotes(totalVotes));
           return ResponseEntity.accepted().build();
         }
-      } catch (JwtException e) {
+      } catch (JwtException | IllegalArgumentException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
       }
     }
@@ -184,8 +202,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       return failed(this).feedback("jwt-invalid-token").build();
     } else {
       try {
-        Jwt jwt = Jwts.parser().setSigningKey(JWT_PASSWORD).parse(accessToken);
-        Claims claims = (Claims) jwt.getBody();
+        Claims claims = parseToken(accessToken);
         boolean isAdmin = Boolean.valueOf(String.valueOf(claims.get("admin")));
         if (!isAdmin) {
           return failed(this).feedback("jwt-only-admin").build();
@@ -193,7 +210,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
           votes.values().forEach(vote -> vote.reset());
           return success(this).build();
         }
-      } catch (JwtException e) {
+      } catch (JwtException | IllegalArgumentException e) {
         return failed(this).feedback("jwt-invalid-token").output(e.toString()).build();
       }
     }
