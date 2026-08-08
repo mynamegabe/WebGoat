@@ -213,7 +213,8 @@ define(['jquery',
 
             /* for testing */
             showTestParam: function (param) {
-                this.$el.find('.lesson-content').html('test:' + param);
+                //the route parameter comes from the URL fragment, insert it as text and never as markup
+                this.$el.find('.lesson-content').text('test:' + param);
             },
 
             resetLesson: function () {

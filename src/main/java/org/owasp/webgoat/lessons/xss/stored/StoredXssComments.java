@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.HtmlUtils;
 
 @RestController
 public class StoredXssComments implements AssignmentEndpoint {
@@ -44,7 +45,7 @@ public class StoredXssComments implements AssignmentEndpoint {
         new Comment(
             "secUriTy",
             LocalDateTime.now().format(fmt),
-            "<script>console.warn('unit test me')</script>Comment for Unit Testing"));
+            encode("<script>console.warn('unit test me')</script>Comment for Unit Testing")));
     comments.add(new Comment("webgoat", LocalDateTime.now().format(fmt), "This comment is safe"));
     comments.add(new Comment("guest", LocalDateTime.now().format(fmt), "This one is safe too."));
     comments.add(
@@ -78,7 +79,8 @@ public class StoredXssComments implements AssignmentEndpoint {
 
     List<Comment> comments = userComments.getOrDefault(username, new ArrayList<>());
     comment.setDateTime(LocalDateTime.now().format(fmt));
-    comment.setUser(username);
+    comment.setUser(encode(username));
+    comment.setText(encode(comment.getText()));
 
     comments.add(comment);
     userComments.put(username, comments);
@@ -97,5 +99,13 @@ public class StoredXssComments implements AssignmentEndpoint {
     } catch (IOException e) {
       return new Comment();
     }
+  }
+
+  /**
+   * The comment list is rendered as HTML by the browser, so everything a user controls is stored
+   * HTML encoded. Markup in a comment is shown as text instead of being executed.
+   */
+  private static String encode(String text) {
+    return text == null ? "" : HtmlUtils.htmlEscape(text);
   }
 }
