@@ -69,14 +69,22 @@ public class FileServer {
     var username = authentication.getName();
     var destinationDir = new File(fileLocation, username);
     destinationDir.mkdirs();
+
+    var destinationFile = new File(destinationDir, multipartFile.getOriginalFilename());
+    if (!isInsideUploadDirectory(destinationDir, destinationFile)) {
+      log.warn("Rejected upload escaping the user directory: {}", multipartFile.getOriginalFilename());
+      return new ModelAndView(
+          new RedirectView("files", true),
+          new ModelMap().addAttribute("uploadSuccess", "Invalid file name"));
+    }
+
     // DO NOT use multipartFile.transferTo(), see
     // https://stackoverflow.com/questions/60336929/java-nio-file-nosuchfileexception-when-file-transferto-is-called
     try (InputStream is = multipartFile.getInputStream()) {
-      var destinationFile = destinationDir.toPath().resolve(multipartFile.getOriginalFilename());
-      Files.deleteIfExists(destinationFile);
-      Files.copy(is, destinationFile);
+      Files.deleteIfExists(destinationFile.toPath());
+      Files.copy(is, destinationFile.toPath());
     }
-    log.debug("File saved to {}", new File(destinationDir, multipartFile.getOriginalFilename()));
+    log.debug("File saved to {}", destinationFile);
 
     return new ModelAndView(
         new RedirectView("files", true),
@@ -115,6 +123,13 @@ public class FileServer {
         uploadedFiles.stream().sorted(comparing(UploadedFile::creationTime).reversed()).toList());
     modelAndView.addObject("webwolf_url", "http://" + server + ":" + port + contextPath);
     return modelAndView;
+  }
+
+  private boolean isInsideUploadDirectory(File uploadDirectory, File uploadedFile)
+      throws IOException {
+    return uploadedFile
+        .getCanonicalPath()
+        .startsWith(uploadDirectory.getCanonicalPath() + File.separator);
   }
 
   private String getCreationTime(TimeZone timezone, File file) {
