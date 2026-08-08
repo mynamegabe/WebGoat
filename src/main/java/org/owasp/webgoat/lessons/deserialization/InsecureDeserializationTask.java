@@ -10,6 +10,7 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.succes
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.util.Base64;
 import org.dummy.insecure.framework.VulnerableTaskHolder;
@@ -29,6 +30,26 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class InsecureDeserializationTask implements AssignmentEndpoint {
 
+  /*
+   * Untrusted serialized data is never turned back into arbitrary objects: only strings and
+   * primitives are accepted, every other class is rejected before it is instantiated, so no
+   * readObject() of a gadget class is ever reached.
+   */
+  private static final ObjectInputFilter SAFE_CLASSES_ONLY =
+      info -> {
+        Class<?> clazz = info.serialClass();
+        if (clazz == null) {
+          return ObjectInputFilter.Status.UNDECIDED;
+        }
+        while (clazz.isArray()) {
+          clazz = clazz.getComponentType();
+        }
+        if (clazz.isPrimitive() || String.class.equals(clazz)) {
+          return ObjectInputFilter.Status.ALLOWED;
+        }
+        return ObjectInputFilter.Status.REJECTED;
+      };
+
   @PostMapping("/InsecureDeserialization/task")
   @ResponseBody
   public AttackResult completed(@RequestParam String token) throws IOException {
@@ -41,6 +62,7 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
 
     try (ObjectInputStream ois =
         new ObjectInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(b64token)))) {
+      ois.setObjectInputFilter(SAFE_CLASSES_ONLY);
       before = System.currentTimeMillis();
       Object o = ois.readObject();
       if (!(o instanceof VulnerableTaskHolder)) {
