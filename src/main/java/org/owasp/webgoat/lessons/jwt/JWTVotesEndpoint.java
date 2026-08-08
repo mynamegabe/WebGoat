@@ -26,6 +26,7 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -57,7 +58,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
 
   // The signing key is a random 512 bit value which cannot be guessed with a word list
   public static final String JWT_PASSWORD = generateSigningKey();
-  private static String validUsers = "TomJerrySylvester";
+  private static final Set<String> VALID_USERS = Set.of("Tom", "Jerry", "Sylvester");
 
   private static int totalVotes = 38929;
   private final Map<String, Vote> votes = new HashMap<>();
@@ -76,6 +77,10 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       throw new JwtException("Unexpected signing algorithm");
     }
     return jws.getBody();
+  }
+
+  private static boolean isValidUser(String user) {
+    return user != null && VALID_USERS.contains(user);
   }
 
   @PostConstruct
@@ -122,7 +127,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
 
   @GetMapping("/JWT/votings/login")
   public void login(@RequestParam("user") String user, HttpServletResponse response) {
-    if (validUsers.contains(user)) {
+    if (isValidUser(user)) {
       Claims claims = Jwts.claims().setIssuedAt(Date.from(Instant.now().plus(Duration.ofDays(10))));
       claims.put("admin", "false");
       claims.put("user", user);
@@ -158,7 +163,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       try {
         Claims claims = parseToken(accessToken);
         String user = (String) claims.get("user");
-        if ("Guest".equals(user) || !validUsers.contains(user)) {
+        if ("Guest".equals(user) || !isValidUser(user)) {
           value.setSerializationView(Views.GuestView.class);
         } else {
           value.setSerializationView(Views.UserView.class);
@@ -182,7 +187,7 @@ public class JWTVotesEndpoint implements AssignmentEndpoint {
       try {
         Claims claims = parseToken(accessToken);
         String user = (String) claims.get("user");
-        if (!validUsers.contains(user)) {
+        if (!isValidUser(user)) {
           return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } else {
           ofNullable(votes.get(title)).ifPresent(v -> v.incrementNumberOfVotes(totalVotes));
