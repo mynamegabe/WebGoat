@@ -4,23 +4,24 @@
  */
 package org.owasp.webgoat.lessons.challenges.challenge7;
 
+import java.security.SecureRandom;
+import java.util.HexFormat;
 import java.util.Random;
 
 /**
- * WARNING: DO NOT CHANGE FILE WITHOUT CHANGING .git contents
- *
  * @author nbaars
  * @since 8/17/17.
  */
 public class PasswordResetLink {
 
+  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
   public String createPasswordReset(String username, String key) {
-    Random random = new Random();
-    if (username.equalsIgnoreCase("admin")) {
-      // Admin has a fix reset link
-      random.setSeed(key.length());
-    }
-    return scramble(random, scramble(random, scramble(random, MD5.getHashString(username))));
+    // Reset tokens are unpredictable: they are drawn from a CSPRNG instead of being derived from
+    // the user name or from a seed an attacker can reconstruct.
+    byte[] token = new byte[16];
+    SECURE_RANDOM.nextBytes(token);
+    return HexFormat.of().formatHex(token);
   }
 
   public static String scramble(Random random, String inputString) {

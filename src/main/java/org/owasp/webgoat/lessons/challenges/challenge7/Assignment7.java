@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AttackResult;
@@ -37,7 +38,8 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class Assignment7 implements AssignmentEndpoint {
 
-  public static final String ADMIN_PASSWORD_LINK = "375afe1104f4a487a73823c50a9292a2";
+  // The admin reset link is generated at startup so it cannot be predicted or replayed.
+  public static final String ADMIN_PASSWORD_LINK = UUID.randomUUID().toString().replace("-", "");
 
   private static final String TEMPLATE =
       "Hi, you requested a password reset link, please use this <a target='_blank'"
