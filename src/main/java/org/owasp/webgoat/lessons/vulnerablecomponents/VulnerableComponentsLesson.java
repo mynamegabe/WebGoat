@@ -12,7 +12,6 @@ import java.io.StringReader;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import org.apache.commons.lang3.StringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
 import org.owasp.webgoat.container.assignments.AttackResult;
@@ -42,17 +41,19 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
     Contact contact = null;
 
     try {
-      if (!StringUtils.isEmpty(payload)) {
-        payload =
-            payload
-                .replace("+", "")
-                .replace("\r", "")
-                .replace("\n", "")
-                .replace("> ", ">")
-                .replace(" <", "<");
-        validateContactDocument(payload);
-      }
-      contact = (Contact) xstream.fromXML(payload);
+      String submitted =
+          payload
+              .replace("+", "")
+              .replace("\r", "")
+              .replace("\n", "")
+              .replace("> ", ">")
+              .replace(" <", "<");
+      /*
+       * The submitted document never reaches the mapping library. Only a contact document that
+       * this lesson builds itself does, so the request can no longer decide which classes the
+       * mapping library instantiates.
+       */
+      contact = (Contact) xstream.fromXML(toContactDocument(submitted));
     } catch (Exception ex) {
       return failed(this).feedback("vulnerable-components.close").output(ex.getMessage()).build();
     }
@@ -62,7 +63,7 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
         contact.getFirstName(); // trigger the example like
         // https://x-stream.github.io/CVE-2013-7285.html
       }
-      if (!(contact instanceof ContactImpl)) {
+      if (null != contact && !(contact instanceof ContactImpl)) {
         return success(this).feedback("vulnerable-components.success").build();
       }
     } catch (Exception e) {
@@ -71,13 +72,13 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
     return failed(this).feedback("vulnerable-components.fromXML").feedbackArgs(contact).build();
   }
 
-  /**
-   * Only a plain contact document is accepted. The mapping library decides which class to
-   * instantiate based on the document itself, so anything it could use to pick another class (type
-   * attributes, dynamic proxies, unknown elements, doctype declarations) is rejected before the
-   * payload reaches it.
+  /*
+   * Reads the submitted document with a parser that resolves nothing, keeps only the values of a
+   * plain contact and writes those values into a freshly built document. Anything the mapping
+   * library could use to pick a class of its own (type attributes, dynamic proxies, unknown or
+   * nested elements, doctype declarations) is either rejected or simply not copied over.
    */
-  private void validateContactDocument(String payload) throws Exception {
+  private String toContactDocument(String payload) throws Exception {
     DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
     factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
     factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
@@ -92,18 +93,22 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
       throw new IllegalArgumentException("Only a plain " + ROOT_ELEMENT + " document is accepted");
     }
 
+    StringBuilder document = new StringBuilder("<").append(ROOT_ELEMENT).append(">");
     NodeList children = root.getChildNodes();
     for (int i = 0; i < children.getLength(); i++) {
       Node child = children.item(i);
       if (child.getNodeType() != Node.ELEMENT_NODE) {
         continue;
       }
-      if (!ALLOWED_ELEMENTS.contains(child.getNodeName())
-          || child.hasAttributes()
-          || hasElementChildren(child)) {
-        throw new IllegalArgumentException("Unexpected element: " + child.getNodeName());
+      String name = child.getNodeName();
+      if (!ALLOWED_ELEMENTS.contains(name) || child.hasAttributes() || hasElementChildren(child)) {
+        throw new IllegalArgumentException("Unexpected element: " + name);
       }
+      document.append("<").append(name).append(">");
+      document.append(escape(child.getTextContent()));
+      document.append("</").append(name).append(">");
     }
+    return document.append("</").append(ROOT_ELEMENT).append(">").toString();
   }
 
   private boolean hasElementChildren(Node node) {
@@ -114,5 +119,12 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
       }
     }
     return false;
+  }
+
+  private String escape(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 }
