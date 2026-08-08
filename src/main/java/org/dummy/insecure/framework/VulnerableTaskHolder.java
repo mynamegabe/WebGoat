@@ -39,8 +39,7 @@ public class VulnerableTaskHolder implements Serializable {
 
   /**
    * Restore the state of a saved or received object. Deserialization only restores data, it never
-   * acts on it, executing the task here would turn any untrusted stream into remote code
-   * execution.
+   * acts on it: running the task here would turn any untrusted stream into remote code execution.
    */
   private void readObject(ObjectInputStream stream) throws Exception {
     // unserialize data so taskName and taskAction are available
