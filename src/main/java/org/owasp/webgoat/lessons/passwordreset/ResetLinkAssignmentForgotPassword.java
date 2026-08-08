@@ -26,18 +26,11 @@ import org.springframework.web.client.RestTemplate;
 public class ResetLinkAssignmentForgotPassword implements AssignmentEndpoint {
 
   private final RestTemplate restTemplate;
-  private final String webGoatHost;
-  private final String webGoatPort;
   private final String webWolfMailURL;
 
   public ResetLinkAssignmentForgotPassword(
-      RestTemplate restTemplate,
-      @Value("${webgoat.host}") String webGoatHost,
-      @Value("${webgoat.port}") String webGoatPort,
-      @Value("${webwolf.mail.url}") String webWolfMailURL) {
+      RestTemplate restTemplate, @Value("${webwolf.mail.url}") String webWolfMailURL) {
     this.restTemplate = restTemplate;
-    this.webGoatHost = webGoatHost;
-    this.webGoatPort = webGoatPort;
     this.webWolfMailURL = webWolfMailURL;
   }
 
@@ -48,24 +41,25 @@ public class ResetLinkAssignmentForgotPassword implements AssignmentEndpoint {
     ResetLinkAssignment.resetLinks.add(resetLink);
     ResetLinkAssignment.resetLinkToEmail.put(resetLink, email);
     try {
-      // The host of the reset link is taken from the configuration of this server. The Host header
-      // is controlled by the client and must never end up in the link we mail to the account.
-      sendMailToUser(email, webGoatHost + ":" + webGoatPort, resetLink);
+      // Only a notification is mailed. The token itself never leaves this server, so neither the
+      // Host header, which is controlled by the client, nor the mailbox of the account can be used
+      // to obtain a usable reset link.
+      sendMailToUser(email);
     } catch (Exception e) {
       return informationMessage(this).output("E-mail can't be send. please try again.").build();
     }
-    // The link is only sent to the mailbox of the account itself and the answer is the same for
-    // every address, so this endpoint never hands out a reset link for somebody else's account.
+    // The answer is the same for every address, so this endpoint neither reveals whether an
+    // account exists nor hands out a reset link for somebody else's account.
     return informationMessage(this).feedback("email.send").feedbackArgs(email).build();
   }
 
-  private void sendMailToUser(String email, String host, String resetLink) {
+  private void sendMailToUser(String email) {
     int index = email.indexOf("@");
     String username = email.substring(0, index == -1 ? email.length() : index);
     PasswordResetEmail mail =
         PasswordResetEmail.builder()
-            .title("Your password reset link")
-            .contents(String.format(ResetLinkAssignment.TEMPLATE, host, resetLink))
+            .title("Password reset requested")
+            .contents(ResetLinkAssignment.TEMPLATE)
             .sender("password-reset@webgoat-cloud.net")
             .recipient(username)
             .build();
