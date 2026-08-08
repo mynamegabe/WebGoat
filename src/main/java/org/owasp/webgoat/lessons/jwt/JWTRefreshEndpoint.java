@@ -14,6 +14,9 @@ import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.impl.TextCodec;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,9 +45,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class JWTRefreshEndpoint implements AssignmentEndpoint {
 
   public static final String PASSWORD = "bm5nhSkxCXZkKRy4";
-  private static final String JWT_PASSWORD = "bm5n3SkxCX4kKRy4";
+  // The signing key is a random 512 bit value which is created when the application starts, it
+  // is no longer a constant which can be read from the source code and used to forge a token.
+  private static final String JWT_PASSWORD = generateSigningKey();
   // A refresh token is bound to the user it was handed out to
   private static final Map<String, String> validRefreshTokens = new ConcurrentHashMap<>();
+
+  private static String generateSigningKey() {
+    byte[] key = new byte[64];
+    new SecureRandom().nextBytes(key);
+    return TextCodec.BASE64.encode(Base64.getEncoder().encodeToString(key));
+  }
 
   @PostMapping(
       value = "/JWT/refresh/login",
