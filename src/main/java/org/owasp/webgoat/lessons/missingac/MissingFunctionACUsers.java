@@ -81,18 +81,17 @@ public class MissingFunctionACUsers {
       consumes = "application/json",
       produces = "application/json")
   @ResponseBody
-  public User addUser(@RequestBody User newUser, @CurrentUsername String username) {
+  public ResponseEntity<User> addUser(
+      @RequestBody User newUser, @CurrentUsername String username) {
+    if (!isAdmin(username)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
     try {
-      // the privilege level of an account is never taken from the request body, only an existing
-      // administrator is allowed to hand out the admin role
-      if (newUser.isAdmin() && !isAdmin(username)) {
-        newUser.setAdmin(false);
-      }
       userRepository.save(newUser);
-      return newUser;
+      return ResponseEntity.ok(newUser);
     } catch (Exception ex) {
       log.error("Error creating new User", ex);
-      return null;
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
     }
 
     // @RequestMapping(path = {"user/{username}","/"}, method = RequestMethod.DELETE, consumes =
