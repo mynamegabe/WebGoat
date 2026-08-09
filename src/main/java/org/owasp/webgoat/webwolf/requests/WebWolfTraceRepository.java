@@ -8,10 +8,8 @@ import static org.owasp.webgoat.webwolf.requests.WebWolfTraceRepository.Exclusio
 import static org.owasp.webgoat.webwolf.requests.WebWolfTraceRepository.Exclusion.endsWith;
 
 import com.google.common.collect.EvictingQueue;
-import com.google.common.collect.Queues;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 import org.springframework.boot.actuate.web.exchanges.HttpExchange;
 import org.springframework.boot.actuate.web.exchanges.HttpExchangeRepository;
 
@@ -47,12 +45,7 @@ public class WebWolfTraceRepository implements HttpExchangeRepository {
     }
   }
 
-  /**
-   * The buffer is written from every request thread and read while /requests renders, so it needs a
-   * thread safe wrapper. EvictingQueue on its own is documented as not thread safe.
-   */
-  private final Queue<HttpExchange> traces = Queues.synchronizedQueue(EvictingQueue.create(10000));
-
+  private final EvictingQueue<HttpExchange> traces = EvictingQueue.create(10000);
   private final List<Exclusion> exclusionList =
       List.of(
           contains("/tmpdir"),
@@ -63,25 +56,11 @@ public class WebWolfTraceRepository implements HttpExchangeRepository {
           contains("/webjars/"),
           contains("/requests"),
           contains("/css/"),
-          contains("/mail"),
-          // WebWolf's own UI and authentication endpoints. These carry session cookies and
-          // credentials and never carry lesson data, so they are not recorded at all.
-          contains("/login"),
-          contains("/logout"),
-          contains("/registration"),
-          contains("/register.mvc"),
-          contains("/csrf/"),
-          contains("/jwt"),
-          contains("/fileupload"),
-          contains("/file-server-location"),
-          contains("/error"),
-          contains("/favicon"));
+          contains("/mail"));
 
   @Override
   public List<HttpExchange> findAll() {
-    synchronized (traces) {
-      return new ArrayList<>(traces);
-    }
+    return new ArrayList<>(traces);
   }
 
   private boolean isInExclusionList(String path) {
