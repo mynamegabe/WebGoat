@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.owasp.webgoat.container.lessons.Category;
 import org.owasp.webgoat.container.lessons.Lesson;
 import org.owasp.webgoat.container.lessons.LessonName;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 public class Course {
@@ -72,10 +74,12 @@ public class Course {
   }
 
   public Lesson getLessonByName(LessonName lessonName) {
+    // an unknown lesson name comes from the request path, so it is a client error: returning null
+    // here made every caller dereference it and answer 500
     return lessons.stream()
         .filter(lesson -> lesson.getName().equals(lessonName))
         .findFirst()
-        .orElse(null);
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown lesson"));
   }
 
   public Lesson getLessonByAssignment(String assignmentName) {

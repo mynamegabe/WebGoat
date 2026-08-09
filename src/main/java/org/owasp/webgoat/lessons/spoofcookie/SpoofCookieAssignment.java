@@ -9,6 +9,7 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.inform
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SpoofCookieAssignment implements AssignmentEndpoint {
 
   private static final String COOKIE_NAME = "spoof_auth";
+  private static final String ISSUED_COOKIE_ATTRIBUTE = "spoof_auth_issued";
   private static final String COOKIE_INFO =
       "Cookie details for user %s:<br />" + COOKIE_NAME + "=%s";
   private static final String ATTACK_USERNAME = "tom";
@@ -50,12 +52,13 @@ public class SpoofCookieAssignment implements AssignmentEndpoint {
       @RequestParam String username,
       @RequestParam String password,
       @CookieValue(value = COOKIE_NAME, required = false) String cookieValue,
+      HttpServletRequest request,
       HttpServletResponse response) {
 
     if (StringUtils.isEmpty(cookieValue)) {
-      return credentialsLoginFlow(username, password, response);
+      return credentialsLoginFlow(username, password, request, response);
     } else {
-      return cookieLoginFlow(cookieValue);
+      return cookieLoginFlow(cookieValue, request);
     }
   }
 
@@ -67,7 +70,7 @@ public class SpoofCookieAssignment implements AssignmentEndpoint {
   }
 
   private AttackResult credentialsLoginFlow(
-      String username, String password, HttpServletResponse response) {
+      String username, String password, HttpServletRequest request, HttpServletResponse response) {
     String lowerCasedUsername = username.toLowerCase();
     if (ATTACK_USERNAME.equals(lowerCasedUsername)
         && users.get(lowerCasedUsername).equals(password)) {
@@ -80,7 +83,9 @@ public class SpoofCookieAssignment implements AssignmentEndpoint {
       Cookie newCookie = new Cookie(COOKIE_NAME, newCookieValue);
       newCookie.setPath("/WebGoat");
       newCookie.setSecure(true);
+      newCookie.setHttpOnly(true);
       response.addCookie(newCookie);
+      request.getSession().setAttribute(ISSUED_COOKIE_ATTRIBUTE, newCookieValue);
       return informationMessage(this)
           .feedback("spoofcookie.login")
           .output(String.format(COOKIE_INFO, lowerCasedUsername, newCookie.getValue()))
@@ -90,7 +95,12 @@ public class SpoofCookieAssignment implements AssignmentEndpoint {
     return informationMessage(this).feedback("spoofcookie.wrong-login").build();
   }
 
-  private AttackResult cookieLoginFlow(String cookieValue) {
+  private AttackResult cookieLoginFlow(String cookieValue, HttpServletRequest request) {
+    // the cookie only proves identity if this server handed it out in this session
+    if (!cookieValue.equals(request.getSession().getAttribute(ISSUED_COOKIE_ATTRIBUTE))) {
+      return failed(this).feedback("spoofcookie.wrong-cookie").build();
+    }
+
     String cookieUsername;
     try {
       cookieUsername = EncDec.decode(cookieValue).toLowerCase();
