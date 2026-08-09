@@ -17,6 +17,7 @@ import org.owasp.webgoat.container.assignments.AttackResult;
 import org.owasp.webgoat.lessons.challenges.Email;
 import org.owasp.webgoat.lessons.challenges.Flags;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -102,13 +103,12 @@ public class Assignment7 implements AssignmentEndpoint {
     return success(this).feedback("email.send").feedbackArgs(email).build();
   }
 
-  @GetMapping("/challenge/7/.git")
+  @GetMapping(value = "/challenge/7/.git", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
   @ResponseBody
-  public ResponseEntity<byte[]> git() {
-    // The repository is no longer published over HTTP: serving it hands out the complete source
-    // history of the application, including material that was removed in later commits.
-    return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .contentType(MediaType.parseMediaType("application/zip"))
-        .body(new byte[0]);
+  public ClassPathResource git() {
+    // The repository is still served: it is part of the exercise. What used to make it dangerous
+    // was the reset link committed in it, and that link is generated at startup now, so the value
+    // recoverable from this history no longer opens the admin account.
+    return new ClassPathResource("lessons/challenges/challenge7/git.zip");
   }
 }
