@@ -6,12 +6,13 @@ package org.owasp.webgoat.container.users;
 
 import java.util.List;
 import java.util.function.Function;
-import lombok.AllArgsConstructor;
 import org.flywaydb.core.Flyway;
 import org.owasp.webgoat.container.lessons.Initializable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +21,6 @@ import org.springframework.stereotype.Service;
  * @since 3/19/17.
  */
 @Service
-@AllArgsConstructor
 public class UserService implements UserDetailsService {
 
   private final UserRepository userRepository;
@@ -29,6 +29,38 @@ public class UserService implements UserDetailsService {
   private final Function<String, Flyway> flywayLessons;
   private final List<Initializable> lessonInitializables;
   private final PasswordEncoder passwordEncoder;
+
+  @Autowired
+  public UserService(
+      UserRepository userRepository,
+      UserProgressRepository userTrackerRepository,
+      JdbcTemplate jdbcTemplate,
+      Function<String, Flyway> flywayLessons,
+      List<Initializable> lessonInitializables,
+      PasswordEncoder passwordEncoder) {
+    this.userRepository = userRepository;
+    this.userTrackerRepository = userTrackerRepository;
+    this.jdbcTemplate = jdbcTemplate;
+    this.flywayLessons = flywayLessons;
+    this.lessonInitializables = lessonInitializables;
+    this.passwordEncoder =
+        passwordEncoder == null ? new BCryptPasswordEncoder() : passwordEncoder;
+  }
+
+  public UserService(
+      UserRepository userRepository,
+      UserProgressRepository userTrackerRepository,
+      JdbcTemplate jdbcTemplate,
+      Function<String, Flyway> flywayLessons,
+      List<Initializable> lessonInitializables) {
+    this(
+        userRepository,
+        userTrackerRepository,
+        jdbcTemplate,
+        flywayLessons,
+        lessonInitializables,
+        new BCryptPasswordEncoder());
+  }
 
   @Override
   public WebGoatUser loadUserByUsername(String username) throws UsernameNotFoundException {
