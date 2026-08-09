@@ -6,6 +6,7 @@ package org.owasp.webgoat.container.users;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.flywaydb.core.Flyway;
 import org.owasp.webgoat.container.lessons.Initializable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,13 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class UserService implements UserDetailsService {
+
+  /**
+   * The schema name is interpolated into DDL, so only names the registration form itself accepts are
+   * allowed here. Identity providers are not bound by that form, so the check is enforced again at
+   * the point the name reaches the database.
+   */
+  private static final Pattern SAFE_SCHEMA_NAME = Pattern.compile("[a-zA-Z0-9-]{1,45}");
 
   private final UserRepository userRepository;
   private final UserProgressRepository userTrackerRepository;
@@ -43,8 +51,7 @@ public class UserService implements UserDetailsService {
     this.jdbcTemplate = jdbcTemplate;
     this.flywayLessons = flywayLessons;
     this.lessonInitializables = lessonInitializables;
-    this.passwordEncoder =
-        passwordEncoder == null ? new BCryptPasswordEncoder() : passwordEncoder;
+    this.passwordEncoder = passwordEncoder == null ? new BCryptPasswordEncoder() : passwordEncoder;
   }
 
   public UserService(
@@ -76,20 +83,29 @@ public class UserService implements UserDetailsService {
   }
 
   public void addUser(String username, String password) {
+    if (!SAFE_SCHEMA_NAME.matcher(username).matches()) {
+      throw new IllegalArgumentException("Invalid username");
+    }
     // get user if there exists one by the name
     var userAlreadyExists = userRepository.existsByUsername(username);
+    if (userAlreadyExists) {
+      // never silently replace the stored credentials of an account that already exists
+      return;
+    }
     var webGoatUser = userRepository.save(new WebGoatUser(username, passwordEncoder.encode(password)));
 
-    if (!userAlreadyExists) {
-      userTrackerRepository.save(
-          new UserProgress(username)); // if user previously existed it will not get another tracker
-      createLessonsForUser(webGoatUser);
-    }
+    userTrackerRepository.save(new UserProgress(username));
+    createLessonsForUser(webGoatUser);
   }
 
   private void createLessonsForUser(WebGoatUser webGoatUser) {
-    jdbcTemplate.execute("CREATE SCHEMA \"" + webGoatUser.getUsername() + "\" authorization dba");
+    jdbcTemplate.execute(
+        "CREATE SCHEMA " + quoteIdentifier(webGoatUser.getUsername()) + " authorization dba");
     flywayLessons.apply(webGoatUser.getUsername()).migrate();
+  }
+
+  private static String quoteIdentifier(String identifier) {
+    return "\"" + identifier.replace("\"", "\"\"") + "\"";
   }
 
   public List<WebGoatUser> getAllUsers() {

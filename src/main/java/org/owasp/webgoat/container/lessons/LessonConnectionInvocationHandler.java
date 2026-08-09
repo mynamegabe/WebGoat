@@ -28,7 +28,7 @@ public class LessonConnectionInvocationHandler implements InvocationHandler {
     var authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication != null && authentication.getPrincipal() instanceof WebGoatUser user) {
       try (var statement = targetConnection.createStatement()) {
-        statement.execute("SET SCHEMA \"" + user.getUsername() + "\"");
+        statement.execute("SET SCHEMA " + quoteIdentifier(user.getUsername()));
       }
     }
     try {
@@ -36,5 +36,14 @@ public class LessonConnectionInvocationHandler implements InvocationHandler {
     } catch (InvocationTargetException e) {
       throw e.getTargetException();
     }
+  }
+
+  /**
+   * A schema name cannot be bound as a statement parameter, so it is escaped as a delimited
+   * identifier instead. Doubling the quote is what SQL defines for an embedded quote, and it stops a
+   * user name from closing the identifier and appending statements of its own.
+   */
+  private static String quoteIdentifier(String identifier) {
+    return "\"" + identifier.replace("\"", "\"\"") + "\"";
   }
 }
