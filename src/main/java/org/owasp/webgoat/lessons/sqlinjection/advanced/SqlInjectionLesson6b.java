@@ -49,7 +49,7 @@ public class SqlInjectionLesson6b implements AssignmentEndpoint {
     // an unguessable fallback, so a database error never leaves a well known value in place
     String password = newSecret();
     try (Connection connection = dataSource.getConnection()) {
-      replaceShippedPassword(connection);
+      retireShippedPassword(connection);
       String query = "SELECT password FROM user_system_data WHERE user_name = 'dave'";
       try {
         Statement statement =
@@ -71,15 +71,19 @@ public class SqlInjectionLesson6b implements AssignmentEndpoint {
     return (password);
   }
 
-  // The lesson data ships with a well known plaintext password for this account. Replace it
-  // with a freshly generated secret every time it is read, so neither the published default nor
-  // a value read earlier is ever a usable credential.
-  private void replaceShippedPassword(Connection connection) {
+  // The lesson data ships with a well known plaintext password for this account, so the published
+  // literal is retired the first time the row is used. The update is conditional on the shipped
+  // value still being in place, which makes it idempotent: the replacement secret then stays put
+  // for the rest of the lesson instead of being re-rolled on every request. Lesson tables live in
+  // a per-user schema and are re-migrated when a lesson is restarted, so this runs once per
+  // schema rather than once per JVM.
+  private void retireShippedPassword(Connection connection) {
     try (PreparedStatement statement =
         connection.prepareStatement(
-            "UPDATE user_system_data SET password = ? WHERE user_name = ?")) {
+            "UPDATE user_system_data SET password = ? WHERE user_name = ? AND password = ?")) {
       statement.setString(1, newSecret());
       statement.setString(2, "dave");
+      statement.setString(3, SHIPPED_PASSWORD);
       statement.executeUpdate();
     } catch (SQLException sqle) {
       // keep the stored password when it cannot be replaced

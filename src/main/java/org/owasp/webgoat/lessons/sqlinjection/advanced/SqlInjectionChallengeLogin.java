@@ -39,7 +39,7 @@ public class SqlInjectionChallengeLogin implements AssignmentEndpoint {
       @RequestParam("password_login") String password)
       throws Exception {
     try (var connection = dataSource.getConnection()) {
-      replaceShippedPassword(connection);
+      retireShippedPassword(connection);
       if (SHIPPED_USER.equals(username) && SHIPPED_PASSWORD.equals(password)) {
         return failed(this).feedback("NoResultsMatched").build();
       }
@@ -60,17 +60,20 @@ public class SqlInjectionChallengeLogin implements AssignmentEndpoint {
     }
   }
 
-  // The lesson data ships with a well known plaintext password for this account. Replace it
-  // with a freshly generated secret on every attempt, so neither the published default nor a
-  // value read earlier is ever a usable credential.
-  private void replaceShippedPassword(Connection connection) {
+  // The lesson data ships with a well known plaintext password for this account, so the published
+  // literal is retired on first use. The update is conditional on the shipped value still being
+  // in place, which makes it idempotent: rotating on every attempt would also discard whatever
+  // the account's password had legitimately become, and would rewrite lesson state that the
+  // surrounding challenge depends on.
+  private void retireShippedPassword(Connection connection) {
     try (PreparedStatement statement =
         connection.prepareStatement(
-            "update sql_challenge_users set password = ? where userid = ?")) {
+            "update sql_challenge_users set password = ? where userid = ? and password = ?")) {
       byte[] secret = new byte[12];
       RANDOM.nextBytes(secret);
       statement.setString(1, HexFormat.of().formatHex(secret));
       statement.setString(2, SHIPPED_USER);
+      statement.setString(3, SHIPPED_PASSWORD);
       statement.executeUpdate();
     } catch (SQLException e) {
       // keep the stored password when it cannot be replaced

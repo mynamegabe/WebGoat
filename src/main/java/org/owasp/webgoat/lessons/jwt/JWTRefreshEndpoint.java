@@ -44,9 +44,11 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class JWTRefreshEndpoint implements AssignmentEndpoint {
 
-  // This login password must not be a source-visible credential. Tests and the lesson can use the
-  // generated value within the same application instance without exposing a reusable secret.
-  public static final String PASSWORD = generateLoginPassword();
+  // The demo account's password is shipped to the browser by the lesson's own script
+  // (lessons/jwt/js/jwt-refresh.js) so the page can open a Jerry session on load. It is a fixture,
+  // not a secret, and rotating it here only desynchronises the two. What actually protects this
+  // lesson is the signing key below and the signature check in parseToken.
+  public static final String PASSWORD = "bm5nhSkxCXZkKRy4";
   // The signing key is a random 512 bit value which is created when the application starts, it
   // is no longer a constant which can be read from the source code and used to forge a token.
   private static final String JWT_PASSWORD = generateSigningKey();
@@ -57,12 +59,6 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
     byte[] key = new byte[64];
     new SecureRandom().nextBytes(key);
     return TextCodec.BASE64.encode(Base64.getEncoder().encodeToString(key));
-  }
-
-  private static String generateLoginPassword() {
-    byte[] password = new byte[24];
-    new SecureRandom().nextBytes(password);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(password);
   }
 
   @PostMapping(
