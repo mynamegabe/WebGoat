@@ -1,3 +1,13 @@
+/*
+ * Ready-to-apply replacement for
+ *   src/main/resources/lessons/xss/js/stored-xss.js
+ *
+ * Derived from h0g3ria PR #49 (fix/xss-stored-follow-up), which is the only branch in the
+ * 168-PR corpus that touches this file. The comment list is now built with jQuery element
+ * constructors and .text(), so nothing coming back from the server is ever parsed as HTML.
+ * This closes the DOM sink that the previous html.replace('COMMENT', ...) + append() pattern
+ * left open, independently of whatever encoding the server applies.
+ */
 $(document).ready(function () {
     $("#postComment").on("click", function () {
         var commentInput = $("#commentInput").val();
@@ -15,28 +25,25 @@ $(document).ready(function () {
         )
     })
 
-    var html = '<li class="comment">' +
-        '<div class="pull-left">' +
-        '<img class="avatar" src="images/avatar1.png" alt="avatar"/>' +
-        '</div>' +
-        '<div class="comment-body">' +
-        '<div class="comment-heading">' +
-        '<h4 class="user">USER</h4>' +
-        '<h5 class="time">DATETIME</h5>' +
-        '</div>' +
-        '<p>COMMENT</p>' +
-        '</div>' +
-        '</li>';
-
     getChallenges();
 
     function getChallenges() {
         $("#list").empty();
         $.get('CrossSiteScriptingStored/stored-xss', function (result, status) {
             for (var i = 0; i < result.length; i++) {
-                var comment = html.replace('USER', result[i].user);
-                comment = comment.replace('DATETIME', result[i].dateTime);
-                comment = comment.replace('COMMENT', result[i].text);
+                var comment = $('<li>').addClass('comment');
+                var image = $('<div>').addClass('pull-left').append(
+                    $('<img>').addClass('avatar').attr({src: 'images/avatar1.png', alt: 'avatar'})
+                );
+                var heading = $('<div>').addClass('comment-heading').append(
+                    $('<h4>').addClass('user').text(result[i].user),
+                    $('<h5>').addClass('time').text(result[i].dateTime)
+                );
+                var body = $('<div>').addClass('comment-body').append(
+                    heading,
+                    $('<p>').text(result[i].text)
+                );
+                comment.append(image, body);
                 $("#list").append(comment);
             }
 
