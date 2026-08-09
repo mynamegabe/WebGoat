@@ -9,7 +9,9 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.succes
 
 import jakarta.annotation.PostConstruct;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import org.owasp.webgoat.container.LessonDataSource;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -27,9 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
       "SqlStringInjectionHint5-4"
     })
 public class SqlInjectionLesson5 implements AssignmentEndpoint {
-
-  private static final String NOT_EXECUTED =
-      "Free-form SQL is not executed by this endpoint, the input is treated as data only.";
 
   private final LessonDataSource dataSource;
 
@@ -59,15 +58,31 @@ public class SqlInjectionLesson5 implements AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
-    // The submitted text is never handed to a Statement, so it cannot grant any privilege; only
-    // the resulting state of the database is verified.
+    if (!LessonQueryGuard.isGrantOnGrantRights(query)) {
+      return failed(this)
+          .output(
+              "Only a single GRANT on the grant_rights table is accepted here.<br> Your query was: "
+                  + query)
+          .build();
+    }
     try (Connection connection = dataSource.getConnection()) {
-      if (checkSolution(connection)) {
-        return success(this).build();
+      // a student-supplied statement runs on a read-only session, so it can never modify
+      // data, schema or permissions
+      connection.setReadOnly(true);
+      try (Statement statement =
+          connection.createStatement(
+              ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE)) {
+        statement.executeQuery(query);
+        if (checkSolution(connection)) {
+          return success(this).build();
+        }
+        return failed(this).output("Your query was: " + query).build();
       }
-      return failed(this).output(NOT_EXECUTED).build();
     } catch (Exception e) {
-      return failed(this).output(this.getClass().getName() + " : " + e.getMessage()).build();
+      return failed(this)
+          .output(
+              this.getClass().getName() + " : " + e.getMessage() + "<br> Your query was: " + query)
+          .build();
     }
   }
 
