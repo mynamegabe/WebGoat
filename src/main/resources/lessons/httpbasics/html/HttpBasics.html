@@ -56,8 +56,12 @@
 					    // sample custom javascript in the recommended way ...
 					    // a namespace has been assigned for it, but you can roll your own if you prefer
 					    webgoat.customjs.assignRandomVal = function () {
-							var x = Math.floor((Math.random() * 100) + 1);
-							document.getElementById("magic_num").value = x;
+							var xhttp = new XMLHttpRequest();
+							xhttp.onload = function () {
+								document.getElementById("magic_num").value = xhttp.responseText;
+							};
+							xhttp.open("GET", "HttpBasics/magic-number", true);
+							xhttp.send();
 						};
 						webgoat.customjs.assignRandomVal();
 					</script>

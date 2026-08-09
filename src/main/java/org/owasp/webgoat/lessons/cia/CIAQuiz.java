@@ -7,7 +7,6 @@ package org.owasp.webgoat.lessons.cia;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
-import jakarta.servlet.http.HttpSession;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AttackResult;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,19 +14,20 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.owasp.webgoat.container.session.LessonSession;
 
 @RestController
 public class CIAQuiz implements AssignmentEndpoint {
 
   private final String[] solutions = {"Solution 3", "Solution 1", "Solution 4", "Solution 2"};
 
-  /*
-   * The per-question outcome used to live in a field on this controller. A controller is a
-   * singleton, so that single array was shared by everybody: whatever the last person to submit
-   * scored was handed to the next caller of the GET below, and anyone could read it without
-   * answering anything at all. The outcome now belongs to the session that produced it.
-   */
-  private static final String RESULTS_KEY = "cia-quiz-results";
+  private static final String GUESSES = "CIAQuiz.guesses";
+
+  private final LessonSession lessonSession;
+
+  public CIAQuiz(LessonSession lessonSession) {
+    this.lessonSession = lessonSession;
+  }
 
   @PostMapping("/cia/quiz")
   @ResponseBody
@@ -35,16 +35,19 @@ public class CIAQuiz implements AssignmentEndpoint {
       @RequestParam String[] question_0_solution,
       @RequestParam String[] question_1_solution,
       @RequestParam String[] question_2_solution,
-      @RequestParam String[] question_3_solution, HttpSession session) {
+      @RequestParam String[] question_3_solution) {
     int correctAnswers = 0;
-    boolean[] guesses = new boolean[solutions.length];
 
     String[] givenAnswers = {
-      question_0_solution[0], question_1_solution[0], question_2_solution[0], question_3_solution[0]
+      chosen(question_0_solution),
+      chosen(question_1_solution),
+      chosen(question_2_solution),
+      chosen(question_3_solution)
     };
 
+    boolean[] guesses = new boolean[solutions.length];
     for (int i = 0; i < solutions.length; i++) {
-      if (givenAnswers[i].contains(solutions[i])) {
+      if (givenAnswers[i].startsWith(solutions[i] + ":")) {
         // answer correct
         correctAnswers++;
         guesses[i] = true;
@@ -54,7 +57,7 @@ public class CIAQuiz implements AssignmentEndpoint {
       }
     }
 
-    session.setAttribute(RESULTS_KEY, guesses);
+    lessonSession.setValue(GUESSES, guesses);
 
     if (correctAnswers == solutions.length) {
       return success(this).build();
@@ -63,10 +66,18 @@ public class CIAQuiz implements AssignmentEndpoint {
     }
   }
 
+  // The radio value is "Solution <n>: <text>", so an answer only counts for the question it was
+  // picked for. A substring test let one string listing every solution pass every question.
+  private static String chosen(String[] submitted) {
+    return submitted == null || submitted.length == 0 ? "" : submitted[0];
+  }
+
   @GetMapping("/cia/quiz")
   @ResponseBody
-  public boolean[] getResults(HttpSession session) {
-    var results = (boolean[]) session.getAttribute(RESULTS_KEY);
-    return results == null ? new boolean[solutions.length] : results.clone();
+  public boolean[] getResults() {
+    // the answer sheet belongs to one user: a field on this singleton handed the
+    // last submitter's results to everyone
+    var guesses = (boolean[]) lessonSession.getValue(GUESSES);
+    return guesses == null ? new boolean[solutions.length] : guesses;
   }
 }
