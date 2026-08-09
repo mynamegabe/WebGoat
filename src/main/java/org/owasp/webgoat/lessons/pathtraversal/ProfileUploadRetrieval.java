@@ -17,6 +17,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.Base64;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -29,7 +30,6 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.token.Sha512DigestUtils;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,6 +51,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProfileUploadRetrieval implements AssignmentEndpoint {
   private final File catPicturesDirectory;
 
+  // The answer is only known to whoever is able to read the protected file, it must not be
+  // derivable from public information such as the user name.
+  private final String assignmentSecret = UUID.randomUUID().toString();
+
   public ProfileUploadRetrieval(@Value("${webgoat.server.directory}") String webGoatHomeDirectory) {
     this.catPicturesDirectory = new File(webGoatHomeDirectory, "/PathTraversal/" + "/cats");
     this.catPicturesDirectory.mkdirs();
@@ -71,7 +75,7 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
     try {
       Files.writeString(
           secretDirectory.toPath().resolve("path-traversal-secret.jpg"),
-          "You found it submit the SHA-512 hash of your username as answer");
+          "You found it submit " + assignmentSecret + " as answer");
     } catch (IOException e) {
       log.error("Unable to write secret in: {}", secretDirectory, e);
     }
@@ -82,10 +86,7 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
   public AttackResult execute(
       @RequestParam(value = "secret", required = false) String secret,
       @CurrentUsername String username) {
-    // The answer this assignment asks for is the exercise's own mechanic, not what protects the
-    // file. What protects it is that /PathTraversal/random-picture no longer resolves a name
-    // outside the cat pictures directory, which is where the flaw was.
-    if (Sha512DigestUtils.shaHex(username).equalsIgnoreCase(secret)) {
+    if (assignmentSecret.equalsIgnoreCase(secret)) {
       return success(this).build();
     }
     return failed(this).build();

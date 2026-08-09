@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
@@ -25,25 +26,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @AssignmentHints({"idor.hints.idor_login"})
 public class IDORLogin implements AssignmentEndpoint {
-
-  private static final String DEMO_PASSWORD = "cat";
-
   private final LessonSession lessonSession;
 
   private final Map<String, Map<String, String>> idorUserInfo = new HashMap<>();
 
-  // The salt is per-instance so the digest below is not a value that can be precomputed offline.
-  // The demonstration account itself is deliberately public: this lesson is about the horizontal
-  // access control on the profile endpoints, and signing in as tom is the starting point the
-  // lesson hands the reader, not a secret that protects anything.
+  // The account secret is not part of the source (and is therefore not part of the distribution
+  // either): it is drawn from SecureRandom when the application starts and only its salted digest
+  // is retained. Passwords are never kept in clear text and are compared in constant time.
   private final byte[] passwordSalt = new byte[16];
   private final byte[] passwordDigest;
 
   public IDORLogin(LessonSession lessonSession) {
     this.lessonSession = lessonSession;
 
-    new SecureRandom().nextBytes(passwordSalt);
-    this.passwordDigest = digest(DEMO_PASSWORD);
+    SecureRandom secureRandom = new SecureRandom();
+    secureRandom.nextBytes(passwordSalt);
+    byte[] secret = new byte[32];
+    secureRandom.nextBytes(secret);
+    this.passwordDigest = digest(Base64.getEncoder().encodeToString(secret));
   }
 
   public void initIDORInfo() {
