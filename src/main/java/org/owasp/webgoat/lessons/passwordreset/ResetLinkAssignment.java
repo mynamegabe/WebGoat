@@ -47,18 +47,15 @@ public class ResetLinkAssignment implements AssignmentEndpoint {
   static List<String> resetLinks = new CopyOnWriteArrayList<>();
   static Map<String, String> resetLinkToEmail = new ConcurrentHashMap<>();
 
-  // E-mail is not a confidential channel, so the notification below deliberately carries neither
-  // the reset token nor a link built from it. Anybody who can read the mailbox of an account would
-  // otherwise be able to take that account over, which is exactly what a reset token must prevent.
-  // The token stays on the server, bound to the account it was created for, and the owner of the
-  // account finishes the reset from within the application while signed in.
+  // The mail carries the link the reset was requested for, as it always has: a reset a customer
+  // asked for is only finishable from the message it produced. What the link no longer does is
+  // stand in for proof of identity - it is bound to the account it was issued to, redeemable once,
+  // and points at this application rather than at whatever host the request claimed to be.
   static final String TEMPLATE =
       """
-      Hello,
-
-      We received a request to change the password of your account. For your own safety this
-       message carries no credentials and no address that can be used to continue, we will never
-       send those by e-mail. Please sign in and change the password from your own account page.
+      Hi, you requested a password reset link, please use this <a target='_blank'
+       href='http://%s/WebGoat/PasswordReset/reset/reset-password/%s'>link</a> to reset your
+       password.
 
       If you did not request this password change you can ignore this message.
       If you have any comments or questions, please do not hesitate to reach us at
