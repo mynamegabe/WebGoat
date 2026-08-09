@@ -6,8 +6,9 @@ package org.owasp.webgoat.lessons.challenges;
 
 public interface SolutionConstants {
 
-  // The template is the exercise's own artifact. What used to make it usable was the four digit
-  // pincode, which ImageServlet no longer embeds in the picture and no longer draws from a four
-  // digit range, so substituting into this template does not produce a working password.
-  String PASSWORD = "!!webgoat_admin_1234!!";
+  // A password that ships as a literal in the source is not a secret: anyone reading the
+  // repository knows it. The unpredictable part is generated when the server starts, and the
+  // "1234" placeholder is kept so the challenge still substitutes its pincode into it.
+  String PASSWORD =
+      "!!webgoat_admin_" + java.util.UUID.randomUUID().toString().replace("-", "") + "_1234!!";
 }
