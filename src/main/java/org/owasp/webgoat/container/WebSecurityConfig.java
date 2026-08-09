@@ -71,7 +71,8 @@ public class WebSecurityConfig {
                 csrf.csrfTokenRepository(csrfTokenRepository)
                     .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                     .ignoringRequestMatchers(
-                        CsrfRequestMatchers.tokenlessApiAuthentication("/login", "/register.mvc")))
+                        CsrfRequestMatchers.tokenlessApiAuthentication("/login", "/register.mvc"))
+                    .ignoringRequestMatchers("/JWT/**"))
         .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
         .exceptionHandling(
             handling ->
