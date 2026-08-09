@@ -55,21 +55,11 @@ public class VerifyAccount implements AssignmentEndpoint {
     }
 
     // else
-    Integer accountId = parseUserId(userId);
-    if (accountId != null
-        && verificationHelper.verifyAccount(accountId, (HashMap) submittedAnswers)) {
+    if (verificationHelper.verifyAccount(Integer.valueOf(userId), (HashMap) submittedAnswers)) {
       userSessionData.setValue("account-verified-id", userId);
       return success(this).feedback("verify-account.success").build();
     } else {
       return failed(this).feedback("verify-account.failed").build();
-    }
-  }
-
-  private Integer parseUserId(String userId) {
-    try {
-      return Integer.valueOf(userId);
-    } catch (NumberFormatException e) {
-      return null;
     }
   }
 

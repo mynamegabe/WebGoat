@@ -58,17 +58,7 @@ public class SqlInjectionLesson5 implements AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
-    if (!LessonQueryGuard.isGrantOnGrantRights(query)) {
-      return failed(this)
-          .output(
-              "Only a single GRANT on the grant_rights table is accepted here.<br> Your query was: "
-                  + query)
-          .build();
-    }
     try (Connection connection = dataSource.getConnection()) {
-      // a student-supplied statement runs on a read-only session, so it can never modify
-      // data, schema or permissions
-      connection.setReadOnly(true);
       try (Statement statement =
           connection.createStatement(
               ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE)) {

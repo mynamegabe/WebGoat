@@ -10,9 +10,7 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.succes
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InvalidClassException;
-import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
-import java.io.ObjectStreamClass;
 import java.util.Base64;
 import org.dummy.insecure.framework.VulnerableTaskHolder;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
@@ -31,26 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class InsecureDeserializationTask implements AssignmentEndpoint {
 
-  /*
-   * Untrusted serialized data is never turned back into arbitrary objects: only strings and
-   * primitives are accepted, every other class is rejected before it is instantiated, so no
-   * readObject() of a gadget class is ever reached.
-   */
-  private static final ObjectInputFilter SAFE_CLASSES_ONLY =
-      info -> {
-        Class<?> clazz = info.serialClass();
-        if (clazz == null) {
-          return ObjectInputFilter.Status.UNDECIDED;
-        }
-        while (clazz.isArray()) {
-          clazz = clazz.getComponentType();
-        }
-        if (clazz.isPrimitive() || String.class.equals(clazz)) {
-          return ObjectInputFilter.Status.ALLOWED;
-        }
-        return ObjectInputFilter.Status.REJECTED;
-      };
-
   @PostMapping("/InsecureDeserialization/task")
   @ResponseBody
   public AttackResult completed(@RequestParam String token) throws IOException {
@@ -61,7 +39,8 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
 
     b64token = token.replace('-', '+').replace('_', '/');
 
-    try (ObjectInputStream ois = new SafeObjectInputStream(b64token)) {
+    try (ObjectInputStream ois =
+        new ObjectInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(b64token)))) {
       before = System.currentTimeMillis();
       Object o = ois.readObject();
       if (!(o instanceof VulnerableTaskHolder)) {
@@ -87,28 +66,5 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
       return failed(this).build();
     }
     return success(this).build();
-  }
-
-  /*
-   * The stream itself refuses to resolve a class or a proxy, so the restriction does not rely on a
-   * deserialization filter alone. A plain string carries no class description and is still read,
-   * which keeps the feedback of this assignment intact.
-   */
-  private static final class SafeObjectInputStream extends ObjectInputStream {
-
-    private SafeObjectInputStream(String b64token) throws IOException {
-      super(new ByteArrayInputStream(Base64.getDecoder().decode(b64token)));
-      setObjectInputFilter(SAFE_CLASSES_ONLY);
-    }
-
-    @Override
-    protected Class<?> resolveClass(ObjectStreamClass desc) throws InvalidClassException {
-      throw new InvalidClassException(desc.getName(), "class is not accepted");
-    }
-
-    @Override
-    protected Class<?> resolveProxyClass(String[] interfaces) throws InvalidClassException {
-      throw new InvalidClassException("proxies are not accepted");
-    }
   }
 }

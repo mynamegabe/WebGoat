@@ -10,17 +10,15 @@ import static org.springframework.http.ResponseEntity.ok;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.Header;
+import io.jsonwebtoken.Jwt;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.impl.TextCodec;
-import java.security.SecureRandom;
-import java.util.Base64;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
@@ -44,22 +42,9 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class JWTRefreshEndpoint implements AssignmentEndpoint {
 
-  // The demo account's password is shipped to the browser by the lesson's own script
-  // (lessons/jwt/js/jwt-refresh.js) so the page can open a Jerry session on load. It is a fixture,
-  // not a secret, and rotating it here only desynchronises the two. What actually protects this
-  // lesson is the signing key below and the signature check in parseToken.
   public static final String PASSWORD = "bm5nhSkxCXZkKRy4";
-  // The signing key is a random 512 bit value which is created when the application starts, it
-  // is no longer a constant which can be read from the source code and used to forge a token.
-  private static final String JWT_PASSWORD = generateSigningKey();
-  // A refresh token is bound to the user it was handed out to
-  private static final Map<String, String> validRefreshTokens = new ConcurrentHashMap<>();
-
-  private static String generateSigningKey() {
-    byte[] key = new byte[64];
-    new SecureRandom().nextBytes(key);
-    return TextCodec.BASE64.encode(Base64.getEncoder().encodeToString(key));
-  }
+  private static final String JWT_PASSWORD = "bm5n3SkxCX4kKRy4";
+  private static final List<String> validRefreshTokens = new ArrayList<>();
 
   @PostMapping(
       value = "/JWT/refresh/login",
@@ -89,21 +74,10 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
             .compact();
     Map<String, Object> tokenJson = new HashMap<>();
     String refreshToken = RandomStringUtils.randomAlphabetic(20);
-    validRefreshTokens.put(refreshToken, user);
+    validRefreshTokens.add(refreshToken);
     tokenJson.put("access_token", token);
     tokenJson.put("refresh_token", refreshToken);
     return tokenJson;
-  }
-
-  // Only accepts a token signed with the algorithm the server uses itself, unsigned
-  // tokens ("alg": "none") and tokens signed with another algorithm are rejected.
-  private Jws<Claims> parseToken(String token) {
-    String jwt = token.replace("Bearer ", "");
-    Jws<Claims> jws = Jwts.parser().setSigningKey(JWT_PASSWORD).parseClaimsJws(jwt);
-    if (!SignatureAlgorithm.HS512.getValue().equals(jws.getHeader().getAlgorithm())) {
-      throw new JwtException("Unexpected signing algorithm");
-    }
-    return jws;
   }
 
   @PostMapping("/JWT/refresh/checkout")
@@ -114,15 +88,19 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
     try {
-      Claims claims = parseToken(token).getBody();
+      Jwt jwt = Jwts.parser().setSigningKey(JWT_PASSWORD).parse(token.replace("Bearer ", ""));
+      Claims claims = (Claims) jwt.getBody();
       String user = (String) claims.get("user");
       if ("Tom".equals(user)) {
+        if ("none".equals(jwt.getHeader().get("alg"))) {
+          return ok(success(this).feedback("jwt-refresh-alg-none").build());
+        }
         return ok(success(this).build());
       }
       return ok(failed(this).feedback("jwt-refresh-not-tom").feedbackArgs(user).build());
     } catch (ExpiredJwtException e) {
       return ok(failed(this).output(e.getMessage()).build());
-    } catch (JwtException | IllegalArgumentException e) {
+    } catch (JwtException e) {
       return ok(failed(this).feedback("jwt-invalid-token").build());
     }
   }
@@ -139,18 +117,18 @@ public class JWTRefreshEndpoint implements AssignmentEndpoint {
     String user;
     String refreshToken;
     try {
-      user = (String) parseToken(token).getBody().get("user");
+      Jwt<Header, Claims> jwt =
+          Jwts.parser().setSigningKey(JWT_PASSWORD).parse(token.replace("Bearer ", ""));
+      user = (String) jwt.getBody().get("user");
       refreshToken = (String) json.get("refresh_token");
     } catch (ExpiredJwtException e) {
       user = (String) e.getClaims().get("user");
       refreshToken = (String) json.get("refresh_token");
-    } catch (JwtException | IllegalArgumentException e) {
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
     if (user == null || refreshToken == null) {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-    } else if (user.equals(validRefreshTokens.get(refreshToken))) {
+    } else if (validRefreshTokens.contains(refreshToken)) {
       validRefreshTokens.remove(refreshToken);
       return ok(createNewTokens(user));
     } else {
