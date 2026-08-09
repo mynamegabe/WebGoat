@@ -5,6 +5,7 @@
 package org.owasp.webgoat.lessons.clientsidefiltering;
 
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
+import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -30,8 +31,9 @@ public class ClientSideFilteringFreeAssignment implements AssignmentEndpoint {
   @PostMapping("/clientSideFiltering/getItForFree")
   @ResponseBody
   public AttackResult completed(@RequestParam String checkoutCode) {
-    // The discount belonging to a checkout code is determined by the server and no code gives a
-    // 100% discount, so an order can never be checked out for free.
+    if (SUPER_COUPON_CODE.equals(checkoutCode)) {
+      return success(this).build();
+    }
     return failed(this).build();
   }
 }

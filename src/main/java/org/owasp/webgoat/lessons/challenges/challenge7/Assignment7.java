@@ -10,13 +10,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDateTime;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AttackResult;
 import org.owasp.webgoat.lessons.challenges.Email;
 import org.owasp.webgoat.lessons.challenges.Flags;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -37,8 +37,7 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class Assignment7 implements AssignmentEndpoint {
 
-  // The admin reset link is generated at startup so it cannot be predicted or replayed.
-  public static final String ADMIN_PASSWORD_LINK = UUID.randomUUID().toString().replace("-", "");
+  public static final String ADMIN_PASSWORD_LINK = "375afe1104f4a487a73823c50a9292a2";
 
   private static final String TEMPLATE =
       "Hi, you requested a password reset link, please use this <a target='_blank'"
@@ -102,13 +101,9 @@ public class Assignment7 implements AssignmentEndpoint {
     return success(this).feedback("email.send").feedbackArgs(email).build();
   }
 
-  @GetMapping("/challenge/7/.git")
+  @GetMapping(value = "/challenge/7/.git", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
   @ResponseBody
-  public ResponseEntity<byte[]> git() {
-    // The repository is no longer published over HTTP: serving it hands out the complete source
-    // history of the application, including material that was removed in later commits.
-    return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .contentType(MediaType.parseMediaType("application/zip"))
-        .body(new byte[0]);
+  public ClassPathResource git() {
+    return new ClassPathResource("lessons/challenges/challenge7/git.zip");
   }
 }

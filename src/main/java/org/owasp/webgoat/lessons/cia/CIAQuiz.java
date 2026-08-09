@@ -14,20 +14,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.owasp.webgoat.container.session.LessonSession;
 
 @RestController
 public class CIAQuiz implements AssignmentEndpoint {
 
   private final String[] solutions = {"Solution 3", "Solution 1", "Solution 4", "Solution 2"};
-
-  private static final String GUESSES = "CIAQuiz.guesses";
-
-  private final LessonSession lessonSession;
-
-  public CIAQuiz(LessonSession lessonSession) {
-    this.lessonSession = lessonSession;
-  }
+  boolean[] guesses = new boolean[solutions.length];
 
   @PostMapping("/cia/quiz")
   @ResponseBody
@@ -39,15 +31,11 @@ public class CIAQuiz implements AssignmentEndpoint {
     int correctAnswers = 0;
 
     String[] givenAnswers = {
-      chosen(question_0_solution),
-      chosen(question_1_solution),
-      chosen(question_2_solution),
-      chosen(question_3_solution)
+      question_0_solution[0], question_1_solution[0], question_2_solution[0], question_3_solution[0]
     };
 
-    boolean[] guesses = new boolean[solutions.length];
     for (int i = 0; i < solutions.length; i++) {
-      if (givenAnswers[i].startsWith(solutions[i] + ":")) {
+      if (givenAnswers[i].contains(solutions[i])) {
         // answer correct
         correctAnswers++;
         guesses[i] = true;
@@ -57,8 +45,6 @@ public class CIAQuiz implements AssignmentEndpoint {
       }
     }
 
-    lessonSession.setValue(GUESSES, guesses);
-
     if (correctAnswers == solutions.length) {
       return success(this).build();
     } else {
@@ -66,18 +52,9 @@ public class CIAQuiz implements AssignmentEndpoint {
     }
   }
 
-  // The radio value is "Solution <n>: <text>", so an answer only counts for the question it was
-  // picked for. A substring test let one string listing every solution pass every question.
-  private static String chosen(String[] submitted) {
-    return submitted == null || submitted.length == 0 ? "" : submitted[0];
-  }
-
   @GetMapping("/cia/quiz")
   @ResponseBody
   public boolean[] getResults() {
-    // the answer sheet belongs to one user: a field on this singleton handed the
-    // last submitter's results to everyone
-    var guesses = (boolean[]) lessonSession.getValue(GUESSES);
-    return guesses == null ? new boolean[solutions.length] : guesses;
+    return this.guesses;
   }
 }
