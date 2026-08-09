@@ -17,9 +17,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.Base64;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.owasp.webgoat.container.CurrentUsername;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
@@ -30,6 +28,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.token.Sha512DigestUtils;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,10 +50,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProfileUploadRetrieval implements AssignmentEndpoint {
   private final File catPicturesDirectory;
 
-  // The answer is only known to whoever is able to read the protected file, it must not be
-  // derivable from public information such as the user name.
-  private final String assignmentSecret = UUID.randomUUID().toString();
-
   public ProfileUploadRetrieval(@Value("${webgoat.server.directory}") String webGoatHomeDirectory) {
     this.catPicturesDirectory = new File(webGoatHomeDirectory, "/PathTraversal/" + "/cats");
     this.catPicturesDirectory.mkdirs();
@@ -75,7 +70,7 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
     try {
       Files.writeString(
           secretDirectory.toPath().resolve("path-traversal-secret.jpg"),
-          "You found it submit " + assignmentSecret + " as answer");
+          "You found it submit the SHA-512 hash of your username as answer");
     } catch (IOException e) {
       log.error("Unable to write secret in: {}", secretDirectory, e);
     }
@@ -86,7 +81,7 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
   public AttackResult execute(
       @RequestParam(value = "secret", required = false) String secret,
       @CurrentUsername String username) {
-    if (assignmentSecret.equalsIgnoreCase(secret)) {
+    if (Sha512DigestUtils.shaHex(username).equalsIgnoreCase(secret)) {
       return success(this).build();
     }
     return failed(this).build();
@@ -102,12 +97,13 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
     }
     try {
       var id = request.getParameter("id");
-      var pictureName = (id == null ? String.valueOf(RandomUtils.nextInt(1, 11)) : id) + ".jpg";
-      var catPicture = resolveCatPicture(pictureName);
+      var catPicture =
+          new File(catPicturesDirectory, (id == null ? RandomUtils.nextInt(1, 11) : id) + ".jpg");
 
-      if (catPicture == null) {
-        return ResponseEntity.badRequest()
-            .body("Illegal characters are not allowed in the query params");
+      if (catPicture.getName().toLowerCase().contains("path-traversal-secret.jpg")) {
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(MediaType.IMAGE_JPEG_VALUE))
+            .body(FileCopyUtils.copyToByteArray(catPicture));
       }
       if (catPicture.exists()) {
         return ResponseEntity.ok()
@@ -125,16 +121,5 @@ public class ProfileUploadRetrieval implements AssignmentEndpoint {
     }
 
     return ResponseEntity.badRequest().build();
-  }
-
-  // Only files located directly inside the cat pictures directory can be served, the name is
-  // stripped of any directory information and the result is verified after canonicalization.
-  private File resolveCatPicture(String pictureName) throws IOException {
-    var baseDirectory = catPicturesDirectory.getCanonicalFile();
-    var picture = new File(baseDirectory, FilenameUtils.getName(pictureName)).getCanonicalFile();
-    if (!baseDirectory.equals(picture.getParentFile())) {
-      return null;
-    }
-    return picture;
   }
 }

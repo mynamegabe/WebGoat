@@ -6,6 +6,7 @@ package org.owasp.webgoat.lessons.pathtraversal;
 
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.informationMessage;
+import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,16 +48,13 @@ public class ProfileUploadBase implements AssignmentEndpoint {
     File uploadDirectory = cleanupAndCreateDirectoryForUser(username);
 
     try {
-      var uploadedFile = resolveUploadTarget(uploadDirectory, fullName);
-      if (uploadedFile == null) {
-        return failed(this)
-            .feedback("path-traversal-profile-attempt")
-            .feedbackArgs(uploadDirectory.getCanonicalPath())
-            .build();
-      }
+      var uploadedFile = new File(uploadDirectory, fullName);
       uploadedFile.createNewFile();
       FileCopyUtils.copy(file.getBytes(), uploadedFile);
 
+      if (attemptWasMade(uploadDirectory, uploadedFile)) {
+        return solvedIt(uploadedFile);
+      }
       return informationMessage(this)
           .feedback("path-traversal-profile-updated")
           .feedbackArgs(uploadedFile.getAbsoluteFile())
@@ -67,22 +65,6 @@ public class ProfileUploadBase implements AssignmentEndpoint {
     }
   }
 
-  // Any directory information in the name supplied by the client is dropped and the resolved
-  // location is verified to stay directly inside the user's own upload directory. Returns null
-  // when the requested name cannot be stored there.
-  private File resolveUploadTarget(File uploadDirectory, String fullName) throws IOException {
-    var fileName = FilenameUtils.getName(fullName);
-    if (StringUtils.isEmpty(fileName)) {
-      return null;
-    }
-    var baseDirectory = uploadDirectory.getCanonicalFile();
-    var resolvedFile = new File(baseDirectory, fileName).getCanonicalFile();
-    if (!baseDirectory.equals(resolvedFile.getParentFile())) {
-      return null;
-    }
-    return resolvedFile;
-  }
-
   @SneakyThrows
   protected File cleanupAndCreateDirectoryForUser(String username) {
     var uploadDirectory = new File(this.webGoatHomeDirectory, "/PathTraversal/" + username);
@@ -91,6 +73,24 @@ public class ProfileUploadBase implements AssignmentEndpoint {
     }
     Files.createDirectories(uploadDirectory.toPath());
     return uploadDirectory;
+  }
+
+  private boolean attemptWasMade(File expectedUploadDirectory, File uploadedFile)
+      throws IOException {
+    return !expectedUploadDirectory
+        .getCanonicalPath()
+        .equals(uploadedFile.getParentFile().getCanonicalPath());
+  }
+
+  private AttackResult solvedIt(File uploadedFile) throws IOException {
+    if (uploadedFile.getCanonicalFile().getParentFile().getName().endsWith("PathTraversal")) {
+      return success(this).build();
+    }
+    return failed(this)
+        .attemptWasMade()
+        .feedback("path-traversal-profile-attempt")
+        .feedbackArgs(uploadedFile.getCanonicalPath())
+        .build();
   }
 
   public ResponseEntity<?> getProfilePicture(@CurrentUsername String username) {
