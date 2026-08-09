@@ -27,15 +27,11 @@ public class ResetLinkAssignmentForgotPassword implements AssignmentEndpoint {
 
   private final RestTemplate restTemplate;
   private final String webWolfMailURL;
-  private final String webGoatURL;
 
   public ResetLinkAssignmentForgotPassword(
-      RestTemplate restTemplate,
-      @Value("${webwolf.mail.url}") String webWolfMailURL,
-      @Value("${webgoat.url}") String webGoatURL) {
+      RestTemplate restTemplate, @Value("${webwolf.mail.url}") String webWolfMailURL) {
     this.restTemplate = restTemplate;
     this.webWolfMailURL = webWolfMailURL;
-    this.webGoatURL = webGoatURL;
   }
 
   @PostMapping("/PasswordReset/ForgotPassword/create-password-reset-link")
@@ -45,10 +41,10 @@ public class ResetLinkAssignmentForgotPassword implements AssignmentEndpoint {
     ResetLinkAssignment.resetLinks.add(resetLink);
     ResetLinkAssignment.resetLinkToEmail.put(resetLink, email);
     try {
-      // The address the link points at comes from this application's own configuration. It used to
-      // be copied out of the request's Host header, so whoever sent the request decided where the
-      // victim's one-time link would lead.
-      sendMailToUser(email, webGoatURL + "/PasswordReset/reset/reset-password/" + resetLink);
+      // Only a notification is mailed. The token itself never leaves this server, so neither the
+      // Host header, which is controlled by the client, nor the mailbox of the account can be used
+      // to obtain a usable reset link.
+      sendMailToUser(email);
     } catch (Exception e) {
       return informationMessage(this).output("E-mail can't be send. please try again.").build();
     }
@@ -57,13 +53,13 @@ public class ResetLinkAssignmentForgotPassword implements AssignmentEndpoint {
     return informationMessage(this).feedback("email.send").feedbackArgs(email).build();
   }
 
-  private void sendMailToUser(String email, String resetUrl) {
+  private void sendMailToUser(String email) {
     int index = email.indexOf("@");
     String username = email.substring(0, index == -1 ? email.length() : index);
     PasswordResetEmail mail =
         PasswordResetEmail.builder()
             .title("Password reset requested")
-            .contents(ResetLinkAssignment.TEMPLATE.formatted(resetUrl))
+            .contents(ResetLinkAssignment.TEMPLATE)
             .sender("password-reset@webgoat-cloud.net")
             .recipient(username)
             .build();

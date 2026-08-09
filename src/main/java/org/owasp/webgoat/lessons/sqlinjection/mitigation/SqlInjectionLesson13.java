@@ -32,10 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class SqlInjectionLesson13 implements AssignmentEndpoint {
 
-  // The lookup is fully parameterised, so neither the address nor the host name can alter the
-  // statement. The row this lesson asks about is a decommissioned server, so the query must not
-  // filter on status.
-  private static final String QUERY = "select ip from servers where ip = ? and hostname = ?";
+  // Only servers which are visible in the overview may be looked up, otherwise this endpoint
+  // confirms the details of a server the user is not allowed to see.
+  private static final String QUERY =
+      "select ip from servers where ip = ? and hostname = ? and status <> 'out of order'";
 
   private final LessonDataSource dataSource;
 
