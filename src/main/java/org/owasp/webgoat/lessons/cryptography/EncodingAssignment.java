@@ -8,8 +8,8 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Random;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AttackResult;
 import org.springframework.http.MediaType;
@@ -22,8 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class EncodingAssignment implements AssignmentEndpoint {
 
-  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-
   public static String getBasicAuth(String username, String password) {
     return Base64.getEncoder().encodeToString(username.concat(":").concat(password).getBytes());
   }
@@ -35,20 +33,12 @@ public class EncodingAssignment implements AssignmentEndpoint {
     String basicAuth = (String) request.getSession().getAttribute("basicAuth");
     String username = request.getUserPrincipal().getName();
     if (basicAuth == null) {
-      // The password used to be drawn from the five word list in HashingAssignment, so the header
-      // below could be read straight off that list. It is drawn from SecureRandom instead. The
-      // header itself is what the lesson asks the reader to decode, and it is built for and
-      // returned to the caller's own session only, so it stays in the response.
-      basicAuth = getBasicAuth(username, generatePassword());
+      String password =
+          HashingAssignment.SECRETS[new Random().nextInt(HashingAssignment.SECRETS.length)];
+      basicAuth = getBasicAuth(username, password);
       request.getSession().setAttribute("basicAuth", basicAuth);
     }
     return "Authorization: Basic ".concat(basicAuth);
-  }
-
-  private static String generatePassword() {
-    byte[] password = new byte[24];
-    SECURE_RANDOM.nextBytes(password);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(password);
   }
 
   @PostMapping("/crypto/encoding/basic-auth")

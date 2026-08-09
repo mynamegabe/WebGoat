@@ -10,8 +10,7 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.succes
 import jakarta.servlet.http.HttpServletRequest;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Base64;
+import java.util.Random;
 import javax.xml.bind.DatatypeConverter;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -28,19 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class HashingAssignment implements AssignmentEndpoint {
   public static final String[] SECRETS = {"secret", "admin", "password", "123456", "passw0rd"};
 
-  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-
-  /*
-   * The digests below are published to the caller and are unsalted digests of a fast hash, so a
-   * secret taken from a short word list is recovered in a handful of guesses. The value handed out
-   * is drawn from a cryptographically secure generator instead, which leaves nothing to guess.
-   */
-  private static String generateSecret() {
-    byte[] secret = new byte[32];
-    SECURE_RANDOM.nextBytes(secret);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
-  }
-
   @RequestMapping(path = "/crypto/hashing/md5", produces = MediaType.TEXT_HTML_VALUE)
   @ResponseBody
   public String getMd5(HttpServletRequest request) throws NoSuchAlgorithmException {
@@ -48,7 +34,7 @@ public class HashingAssignment implements AssignmentEndpoint {
     String md5Hash = (String) request.getSession().getAttribute("md5Hash");
     if (md5Hash == null) {
 
-      String secret = generateSecret();
+      String secret = SECRETS[new Random().nextInt(SECRETS.length)];
 
       MessageDigest md = MessageDigest.getInstance("MD5");
       md.update(secret.getBytes());
@@ -64,9 +50,9 @@ public class HashingAssignment implements AssignmentEndpoint {
   @ResponseBody
   public String getSha256(HttpServletRequest request) throws NoSuchAlgorithmException {
 
-    String sha256 = (String) request.getSession().getAttribute("sha256Hash");
+    String sha256 = (String) request.getSession().getAttribute("sha256");
     if (sha256 == null) {
-      String secret = generateSecret();
+      String secret = SECRETS[new Random().nextInt(SECRETS.length)];
       sha256 = getHash(secret, "SHA-256");
       request.getSession().setAttribute("sha256Hash", sha256);
       request.getSession().setAttribute("sha256Secret", secret);
